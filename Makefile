@@ -1,4 +1,4 @@
-OBJS= hash.o inout.o lex_yy.o opcode.o table.o y_tab.o lua.o iolib.o mathlib.o strlib.o
+OBJS= hash.o inout.o lex.o opcode.o table.o y.tab.o lua.o iolib.o mathlib.o strlib.o
 
 CFLAGS= -Wall -O2 -I.
 
