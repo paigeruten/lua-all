@@ -1,1 +1,1 @@
-print("Hello from Lua 2.4")
+print("Hello from ".._VERSION_)
