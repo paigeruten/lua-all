@@ -1,6 +1,6 @@
-OBJS0= fallback.o func.o hash.o inout.o lex.o luamem.o opcode.o parser.o table.o tree.o undump.o zio.o
-OBJS= $(OBJS0) lua.o iolib.o mathlib.o strlib.o auxlib.o
-OBJS2= $(OBJS0) luac.o dump.o print.o auxlib.o
+OBJS0= lapi.o lbuffer.o lbuiltin.o ldo.o lfunc.o lgc.o llex.o lmem.o lobject.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o 
+OBJS= $(OBJS0) lua.o lauxlib.o liolib.o lmathlib.o lstrlib.o
+OBJS2= $(OBJS0) luac.o dump.o opcode.o opt.o print.o lauxlib.o #stubs.o
 
 CFLAGS= -Wall -O2
 

@@ -1,17 +1,25 @@
 /*
-** lua.c
-** Linguagem para Usuarios de Aplicacao
+** $Id: lua.c,v 1.14 1998/02/11 20:56:05 roberto Exp $
+** Lua stand-alone interpreter
+** See Copyright Notice in lua.h
 */
 
-char *rcs_lua="$Id: lua.c,v 1.18 1997/06/19 18:55:40 roberto Exp $";
 
+#include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "lua.h"
-#include "auxlib.h"
+#include "luadebug.h"
 #include "lualib.h"
 
+
+#ifndef OLD_ANSI
+#include <locale.h>
+#else
+#define setlocale(a,b)  0
+#endif
 
 #ifdef _POSIX_SOURCE
 #include <unistd.h>
@@ -20,122 +28,167 @@ char *rcs_lua="$Id: lua.c,v 1.18 1997/06/19 18:55:40 roberto Exp $";
 #endif
 
 
-#define DEBUG	0
+typedef void (*handler)(int);  /* type for signal actions */
 
-static void testC (void)
+static void laction (int i);
+
+static handler lreset (void)
 {
-#if DEBUG
-#define getnum(s)	((*s++) - '0')
-#define getname(s)	(nome[0] = *s++, nome)
+  lua_linehook = NULL;
+  lua_callhook = NULL;
+  return signal(SIGINT, laction);
+}
 
-  static int locks[10];
-  lua_Object reg[10];
-  char nome[2];
-  char *s = luaL_check_string(1);
-  nome[1] = 0;
-  while (1) {
-    switch (*s++) {
-      case '0': case '1': case '2': case '3': case '4':
-      case '5': case '6': case '7': case '8': case '9':
-        lua_pushnumber(*(s-1) - '0');
-        break;
+static void lstop (void)
+{
+  lreset();
+  lua_error("interrupted!");
+}
 
-      case 'c': reg[getnum(s)] = lua_createtable(); break;
+static void laction (int i)
+{
+  lua_linehook = (lua_LHFunction)lstop;
+  lua_callhook = (lua_CHFunction)lstop;
+}
 
-      case 'P': reg[getnum(s)] = lua_pop(); break;
-
-      case 'g': { int n = getnum(s); reg[n] = lua_getglobal(getname(s)); break; }
-
-      case 'G': { int n = getnum(s);
-                  reg[n] = lua_rawgetglobal(getname(s));
-                  break;
-                }
-
-      case 'l': locks[getnum(s)] = lua_ref(1); break;
-      case 'L': locks[getnum(s)] = lua_ref(0); break;
-
-      case 'r': { int n = getnum(s); reg[n] = lua_getref(locks[getnum(s)]); break; }
-
-      case 'u': lua_unref(locks[getnum(s)]); break;
-
-      case 'p': { int n = getnum(s); reg[n] = lua_getparam(getnum(s)); break; }
-
-      case '=': lua_setglobal(getname(s)); break;
-
-      case 's': lua_pushstring(getname(s)); break;
-
-      case 'o': lua_pushobject(reg[getnum(s)]); break;
-
-      case 'f': lua_call(getname(s)); break;
-
-      case 'i': reg[getnum(s)] = lua_gettable(); break;
-
-      case 'I': reg[getnum(s)] = lua_rawgettable(); break;
-
-      case 't': lua_settable(); break;
-
-      case 'T': lua_rawsettable(); break;
-
-      default: luaL_verror("unknown command in `testC': %c", *(s-1));
-
-    }
-  if (*s == 0) return;
-  if (*s++ != ' ') lua_error("missing ` ' between commands in `testC'");
-  }
-#else
-  lua_error("`testC' not active");
-#endif
+static int ldo (int (*f)(char *), char *name)
+{
+  int res;
+  handler h = lreset();
+  res = f(name);  /* dostring | dofile */
+  signal(SIGINT, h);  /* restore old action */
+  return res;
 }
 
 
-static void manual_input (void)
+static void print_message (void)
 {
-  if (isatty(0)) {
-    char buffer[250];
-    while (fgets(buffer, sizeof(buffer), stdin) != 0) {
-      lua_beginblock();
-      lua_dostring(buffer);
-      lua_endblock();
-    }
+  fprintf(stderr,
+"Lua: command line options:\n"
+"  -v       print version information\n"
+"  -d       turn debug on\n"
+"  -e stat  dostring `stat'\n"
+"  -q       interactive mode without prompt\n"
+"  -i       interactive mode with prompt\n"
+"  -        executes stdin as a file\n"
+"  a=b      sets global `a' with string `b'\n"
+"  name     dofile `name'\n\n");
+}
+
+
+static void assign (char *arg)
+{
+  if (strlen(arg) >= 500)
+    fprintf(stderr, "lua: shell argument too long");
+  else {
+    char buffer[500];
+    char *eq = strchr(arg, '=');
+    lua_pushstring(eq+1);
+    strncpy(buffer, arg, eq-arg);
+    buffer[eq-arg] = 0;
+    lua_setglobal(buffer);
   }
-  else
-    lua_dofile(NULL);  /* executes stdin as a file */
+}
+
+#define BUF_SIZE	512
+
+static void manual_input (int prompt)
+{
+  int cont = 1;
+  while (cont) {
+    char buffer[BUF_SIZE];
+    int i = 0;
+    lua_beginblock();
+    if (prompt)
+      printf("%s", lua_getstring(lua_getglobal("_PROMPT")));
+    for(;;) {
+      int c = getchar();
+      if (c == EOF) {
+        cont = 0;
+        break;
+      }
+      else if (c == '\n') {
+        if (i>0 && buffer[i-1] == '\\')
+          buffer[i-1] = '\n';
+        else break;
+      }
+      else if (i >= BUF_SIZE-1) {
+        fprintf(stderr, "lua: argument line too long\n");
+        break;
+      }
+      else buffer[i++] = c;
+    }
+    buffer[i] = 0;
+    ldo(lua_dostring, buffer);
+    lua_endblock();
+  }
+  printf("\n");
 }
 
 
 int main (int argc, char *argv[])
 {
   int i;
-  int result = 0;
-  iolib_open ();
-  strlib_open ();
-  mathlib_open ();
-  lua_register("testC", testC);
-  if (argc < 2)
-    manual_input();
+  setlocale(LC_ALL, "");
+  lua_iolibopen();
+  lua_strlibopen();
+  lua_mathlibopen();
+  lua_pushstring("> "); lua_setglobal("_PROMPT");
+  if (argc < 2) {  /* no arguments? */
+    if (isatty(0)) {
+      printf("%s  %s\n", LUA_VERSION, LUA_COPYRIGHT);
+      manual_input(1);
+    }
+    else
+      ldo(lua_dofile, NULL);  /* executes stdin as a file */
+  }
   else for (i=1; i<argc; i++) {
-    if (strcmp(argv[i], "-") == 0)
-      manual_input();
-    else if (strcmp(argv[i], "-v") == 0)
-      printf("%s  %s\n(written by %s)\n\n",
-             LUA_VERSION, LUA_COPYRIGHT, LUA_AUTHORS);
-    else if ((strcmp(argv[i], "-e") == 0 && i++) || strchr(argv[i], '=')) {
-      if (lua_dostring(argv[i]) != 0) {
-        fprintf(stderr, "lua: error running argument `%s'\n", argv[i]);
-        return 1;
+    if (argv[i][0] == '-') {  /* option? */
+      switch (argv[i][1]) {
+        case 0:
+          ldo(lua_dofile, NULL);  /* executes stdin as a file */
+          break;
+        case 'i':
+          manual_input(1);
+          break;
+        case 'q':
+          manual_input(0);
+          break;
+        case 'd':
+          lua_debug = 1;
+          break;
+        case 'v':
+          printf("%s  %s\n(written by %s)\n\n",
+                 LUA_VERSION, LUA_COPYRIGHT, LUA_AUTHORS);
+          break;
+        case 'e':
+          i++;
+          if (ldo(lua_dostring, argv[i]) != 0) {
+            fprintf(stderr, "lua: error running argument `%s'\n", argv[i]);
+            return 1;
+          }
+          break;
+        default:
+          print_message();
+          exit(1);
       }
     }
+    else if (strchr(argv[i], '='))
+      assign(argv[i]);
     else {
-      result = lua_dofile (argv[i]);
+      int result = ldo(lua_dofile, argv[i]);
       if (result) {
         if (result == 2) {
           fprintf(stderr, "lua: cannot execute file ");
           perror(argv[i]);
         }
-        return 1;
+        exit(1);
       }
     }
   }
-  return result;
+#ifdef DEBUG
+  lua_close();
+#endif
+  return 0;
 }
 
