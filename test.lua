@@ -1,1 +1,1 @@
-print("Hello from ".._VERSION_)
+print("Hello from ".._VERSION)
