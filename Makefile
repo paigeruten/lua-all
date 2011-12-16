@@ -1,6 +1,6 @@
-OBJS0= lapi.o lcode.o ldo.o ldump.o ldebug.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o 
-OBJS= $(OBJS0) lua.o lauxlib.o lbaselib.o ldblib.o liolib.o lmathlib.o loslib.o ltablib.o lstrlib.o loadlib.o linit.o
-OBJS2= $(OBJS0) luac.o print.o lauxlib.o
+OBJS0=lapi.o lcode.o lctype.o ldebug.o ldo.o ldump.o lfunc.o lgc.o llex.o lmem.o lobject.o lopcodes.o lparser.o lstate.o lstring.o ltable.o ltm.o lundump.o lvm.o lzio.o
+OBJS= $(OBJS0) lua.o lauxlib.o lbaselib.o lbitlib.o lcorolib.o ldblib.o liolib.o lmathlib.o loslib.o lstrlib.o ltablib.o loadlib.o linit.o
+OBJS2= $(OBJS0) luac.o lauxlib.o
 
 CFLAGS= -Wall -O2
 
